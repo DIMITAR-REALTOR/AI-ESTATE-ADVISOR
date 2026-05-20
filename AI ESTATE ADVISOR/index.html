@@ -978,12 +978,6 @@ function getActive(groupId) {
   return [...document.querySelectorAll('#' + groupId + ' .radio-btn.active')].map(b => b.textContent).join(', ');
 }
 
-function updateAIProvider() {
-    const provider = document.getElementById('ai-provider').value;
-    localStorage.setItem('aiProvider', provider);
-    showToast(`Превключено към ${provider === 'groq' ? 'Groq' : 'Anthropic'}`);
-}
-
 async function analyze() {
   const data = {
     propType: document.getElementById('prop-type').value,
@@ -1034,70 +1028,36 @@ async function analyze() {
 }
 Минимум 3 риска, максимум 7. Конкретни и практични. На български.`;
 
-  const provider = localStorage.getItem('aiProvider') || 'anthropic';
-  const apiKey = document.getElementById('api-key').value;
-
-  if (!apiKey) {
-      document.getElementById('loading-view').style.display = 'none';
-      document.getElementById('error-view').style.display = 'block';
-      document.getElementById('error-msg').textContent = 'Моля, въведете API ключ в секция "План".';
-      return;
-  }
-
   try {
-    let url, body, headers;
-    if (provider === 'groq') {
-        url = 'https://api.groq.com/openai/v1/chat/completions';
-        headers = { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-        };
-        body = JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
-            messages: [{ role: 'user', content: prompt }],
-            temperature: 0.2
-        });
-    } else {
-        url = 'https://api.anthropic.com/v1/messages';
-        headers = { 
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01'
-        };
-        body = JSON.stringify({
-            model: 'claude-3-sonnet-20240229',
-            max_tokens: 1200,
-            messages: [{ role: 'user', content: prompt }]
-        });
+    const resp = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+
+    if (!resp.ok) {
+      const errorData = await resp.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP ${resp.status}`);
     }
 
-    const resp = await fetch(url, { method: 'POST', headers, body });
     const res = await resp.json();
-    
-    let text = '';
-    if (provider === 'groq') {
-        text = res.choices[0].message.content;
-    } else {
-        text = res.content.map(b => b.text || '').join('');
-    }
+    const text = res.choices[0].message.content;
 
     const clean = text.replace(/```json|```/g, '').trim();
     const result = JSON.parse(clean);
-    
+
     // Save to history
     deals.unshift({ id: Date.now(), data, result });
     localStorage.setItem('estateDeals', JSON.stringify(deals.slice(0, 20)));
-    
+
     renderResult(result, data, priceNum, areaNum);
   } catch(e) {
     console.error(e);
     document.getElementById('loading-view').style.display = 'none';
     document.getElementById('error-view').style.display = 'block';
-    document.getElementById('error-msg').textContent = 'Грешка при анализа. Проверете API ключа и интернет връзката.';
+    document.getElementById('error-msg').textContent = 'Грешка при анализа. Моля, опитайте отново по-късно.';
   }
-}
-
-function renderResult(r, data, priceNum, areaNum) {
+}function renderResult(r, data, priceNum, areaNum) {
   document.getElementById('loading-view').style.display = 'none';
   const score = r.risk_score;
   const scoreColor = score <= 3 ? '#10b981' : score <= 5 ? '#84cc16' : score <= 7 ? '#f59e0b' : '#ef4444';
@@ -1603,8 +1563,6 @@ function showToast(msg) {
 // Initialize
 window.onload = () => {
     renderHistory();
-    const savedProvider = localStorage.getItem('aiProvider');
-    if (savedProvider) document.getElementById('ai-provider').value = savedProvider;
 };
 
     </script>
